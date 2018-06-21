@@ -16,6 +16,8 @@ const int POINTERS_PER_BLOCK = 1024;
 const int MOUNT_TRAIT = false;
 const int DEBUG_TRAIT = false;
 
+bool MOUNTED = false;
+
 std::vector<int> data_bitmap;
 std::vector<int> inode_bitmap;
 
@@ -55,6 +57,11 @@ void fs_debug()
 {
 	Debug<DEBUG_TRAIT>::msg("fs_debug: ### BEGIN ###");
 
+	if(!MOUNTED) {
+		std::cout << "[ERROR] please mount first!" << std::endl;
+		return;
+	}
+
 	union fs_block block;
 
 	disk_read(0,block.data);
@@ -74,10 +81,10 @@ void fs_debug()
 
 	for (int i = 0; i < block.super.ninodes; i++) {
 		if(inode_bitmap[i] == 1) {
-			std::cout << "inode " << i << ":" << " bytes" << std::endl;
+			std::cout << "inode " << i << ":" << std::endl;
 			disk_read(i/INODES_PER_BLOCK + 1, inode.data);
 
-			std::cout << "\tsize: " << inode.inode[i%INODES_PER_BLOCK].size << std::endl;
+			std::cout << "\tsize: " << inode.inode[i%INODES_PER_BLOCK].size <<  " bytes" << std::endl;
 
 			bool have_direct = false;
 
@@ -117,7 +124,7 @@ int fs_mount()
 
 	disk_read(0,block.data);
 
-	data_bitmap.resize(block.super.nblocks - block.super.ninodeblocks - 1, 0);
+	data_bitmap.resize(block.super.nblocks, 0);
 	inode_bitmap.resize(block.super.ninodes, 0);
 
 	if(block.super.magic != FS_MAGIC){			
@@ -166,7 +173,7 @@ int fs_mount()
 			}
 		}
 	}
-
+	MOUNTED = true;
 	Debug<MOUNT_TRAIT>::msg("fs_mount: ### END ###");
 	return 1;
 }
