@@ -13,8 +13,11 @@ const int INODES_PER_BLOCK   = 128;
 const int POINTERS_PER_INODE = 5;
 const int POINTERS_PER_BLOCK = 1024;
 
-const int MOUNT_TRAIT = false;
-const int DEBUG_TRAIT = false;
+// const int MOUNT_TRAIT = true;
+// const int DEBUG_TRAIT = false;
+
+#define MOUNT_TRAIT false
+#define DEBUG_TRAIT false
 
 bool MOUNTED = false;
 
@@ -162,6 +165,7 @@ int fs_mount()
 			}
 			if(inode.inode[i%INODES_PER_BLOCK].indirect != 0){
 				Debug<MOUNT_TRAIT>::msg("fs_mount: inode " + std::to_string(i) + " indirect block point to " + std::to_string(inode.inode[i%INODES_PER_BLOCK].indirect) + " block!");
+				data_bitmap[inode.inode[i%INODES_PER_BLOCK].indirect] = 1;
 				union fs_block indirect;
 				disk_read(inode.inode[i%INODES_PER_BLOCK].indirect, indirect.data);
 				for(int j = 0; j < POINTERS_PER_BLOCK; j++){
@@ -174,6 +178,16 @@ int fs_mount()
 		}
 	}
 	MOUNTED = true;
+
+	#if MOUNT_TRAIT == 1
+		for(auto i : data_bitmap)
+			std::cout << i;
+		std::cout << std::endl;
+		// for(auto i : inode_bitmap)
+		// 	std::cout << i;
+		// std::cout << std::endl;
+	#endif
+
 	Debug<MOUNT_TRAIT>::msg("fs_mount: ### END ###");
 	return 1;
 }
