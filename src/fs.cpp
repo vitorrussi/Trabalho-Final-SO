@@ -62,15 +62,16 @@ int fs_format()
 	}
 
 	union fs_block block;
-	for(int i = 0; i < DISK_BLOCK_SIZE; i++){
+	for(int i = 0; i < DISK_BLOCK_SIZE; i++){ 	//criando um bloco vazio, para utilizar no block.data
 		block.data[i] = 0;
 	}
 
-		for(int i = 0 ; i < disk_size(); i++) {
-			disk_write(i,block.data);
-		}
+	for(int i = 0 ; i < disk_size(); i++) { //limpando o disco
+		disk_write(i,block.data);
+	}
+
 	Debug<FORMAT_TRAIT>::msg("fs_format: disk cleaned");
-	
+	//criando o superbloco
 	block.super.magic = FS_MAGIC;
 	block.super.nblocks = disk_size();
 	block.super.ninodeblocks = std::ceil(block.super.nblocks/10.0);
@@ -111,20 +112,19 @@ void fs_debug()
 			std::cout << "inode " << i << ":" << std::endl;
 			disk_read(i/INODES_PER_BLOCK + 1, inode.data);
 
-			std::cout << "\tsize: " << inode.inode[i%INODES_PER_BLOCK].size <<  " bytes" << std::endl;
+			std::cout << "\tsize: " << inode.inode[i%INODES_PER_BLOCK].size <<  " bytes";
 
 			bool have_direct = false;
 
 			for(int j = 0 ; j < POINTERS_PER_INODE; j++){
 				if(inode.inode[i%INODES_PER_BLOCK].direct[j] != 0){
-					if(!have_direct){std::cout << "\tdirect blocks: "; have_direct = true;}
+					if(!have_direct){std::cout << std::endl << "\tdirect blocks: "; have_direct = true;}
 					std::cout << inode.inode[i%INODES_PER_BLOCK].direct[j] << " ";
 				} 
 			}
 
-			std::cout << std::endl;
 			if(inode.inode[i%INODES_PER_BLOCK].indirect != 0){
-				std::cout << "\tindirect block: " << inode.inode[i%INODES_PER_BLOCK].indirect << std::endl;
+				std::cout << std::endl << "\tindirect block: " << inode.inode[i%INODES_PER_BLOCK].indirect << std::endl;
 
 				union fs_block indirect;
 				disk_read(inode.inode[i%INODES_PER_BLOCK].indirect, indirect.data);
@@ -137,6 +137,7 @@ void fs_debug()
 			}
 			std::cout << std::endl;
 		}
+
 	}
 
 	Debug<DEBUG_TRAIT>::msg("fs_debug: ### END ###");
@@ -201,7 +202,7 @@ int fs_mount()
 			}
 		}
 	}
-	Debug<MOUNT_TRAIT>::msg("fs_mount: FILLING DATA BITMAP WITH INODES AND SUPER");
+	Debug<MOUNT_TRAIT>::msg("fs_mount: FILLING DATA BITMAP WITH INODES AND SUPER BLOCKS");
 	data_bitmap[0] = 1;
 	for(int i = 0; i < block.super.ninodeblocks; i++)
 		data_bitmap[i+1] = 1;
@@ -223,25 +224,73 @@ int fs_mount()
 
 int fs_create()
 {
+	if(!MOUNTED) {
+		std::cout << "[ERROR] please mount first!" << std::endl;
+		return 0;
+	}
+	for(int i = 1; i < inode_bitmap.size(); i++) { //começa em 1 pq o inode 0 eh invalido
+		if(inode_bitmap[i] == 0) {
+			union fs_block inode;
+			disk_read(i / INODES_PER_BLOCK + 1,inode.data);	// le o bloco inteiro de inodo onde o inodo ta, pq
+			int inode_index = i % INODES_PER_BLOCK;
+			inode.inode[inode_index].isvalid = 1;	// o disk_write apenas escreve em 1 bloco de 4KB, e nao
+			inode.inode[inode_index].size = 0;		// em apenas 1 inodo
+			for(int j = 0; j < POINTERS_PER_INODE; j++)
+				inode.inode[inode_index].direct[j] = 0;
+			inode.inode[inode_index].indirect = 0;
+			inode_bitmap[i] = 1;							// atualiza o bitmap
+			disk_write(i/INODES_PER_BLOCK + 1, inode.data); // escreve o bloco inteiro com o inodo atualizado
+			return i;
+		}
+	}
 	return 0;
 }
 
 int fs_delete( int inumber )
 {
-	return 0;
+	if(!MOUNTED) {
+		std::cout << "[ERROR] please mount first!" << std::endl;
+		return 0;
+	}
+	union fs_block block;
+	disk_read(0, block.data);
+	if(inumber == 0 || inumber > block.super.ninodes){
+		std::cout << "[ERROR] inumber out of bounds!" << std::endl;
+		return 0;
+	}
+	union fs_block inode;
+	disk_read(inumber/INODES_PER_BLOCK + 1, inode.data);
+	int inode_index = inumber % INODES_PER_BLOCK;
+
+
+
+
+	return 1;
 }
 
 int fs_getsize( int inumber )
 {
+	if(!MOUNTED) {
+		std::cout << "[ERROR] please mount first!" << std::endl;
+		return -1;
+	}
 	return -1;
 }
 
 int fs_read( int inumber, char *data, int length, int offset )
 {
+	if(!MOUNTED) {
+		std::cout << "[ERROR] please mount first!" << std::endl;
+		return 0;
+	}
 	return 0;
 }
 
 int fs_write( int inumber, const char *data, int length, int offset )
 {
+	if(!MOUNTED) {
+		std::cout << "[ERROR] please mount first!" << std::endl;
+		return 0;
+	}
 	return 0;
 }
