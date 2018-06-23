@@ -1,0 +1,29 @@
+const int FS_MAGIC           = 0xf0f03410;
+const int INODES_PER_BLOCK   = 128;
+const int POINTERS_PER_INODE = 5;
+const int POINTERS_PER_BLOCK = 1024;
+
+struct fs_superblock {
+	int magic;
+	int nblocks;
+	int ninodeblocks;
+	int ninodes;
+};
+
+struct fs_inode {
+	int isvalid;
+	int size;
+	int direct[POINTERS_PER_INODE];
+	int indirect;
+};
+
+union fs_block {
+	struct fs_superblock super;
+	struct fs_inode inode[INODES_PER_BLOCK];
+	int pointers[POINTERS_PER_BLOCK];
+	char data[DISK_BLOCK_SIZE];
+};
+
+
+
+

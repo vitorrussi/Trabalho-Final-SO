@@ -1,5 +1,5 @@
 GCC=/usr/bin/g++
-CPPFLAGS = -std=c++14
+CPPFLAGS = -std=c++14 -Wall
 simplefs: shell.o fs.o disk.o
 	$(GCC) shell.o fs.o disk.o -o simplefs $(CPPFLAGS)
 
