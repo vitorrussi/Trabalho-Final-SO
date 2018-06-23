@@ -20,6 +20,7 @@ const int POINTERS_PER_BLOCK = 1024;
 #define MOUNT_TRAIT true
 #define DEBUG_TRAIT false
 #define FORMAT_TRAIT true
+#define DELETE_TRAIT true
 
 bool MOUNTED = false;
 
@@ -232,9 +233,9 @@ int fs_create()
 		if(inode_bitmap[i] == 0) {
 			union fs_block inode;
 			disk_read(i / INODES_PER_BLOCK + 1,inode.data);	// le o bloco inteiro de inodo onde o inodo ta, pq
-			int inode_index = i % INODES_PER_BLOCK;
-			inode.inode[inode_index].isvalid = 1;	// o disk_write apenas escreve em 1 bloco de 4KB, e nao
-			inode.inode[inode_index].size = 0;		// em apenas 1 inodo
+			int inode_index = i % INODES_PER_BLOCK;			// o disk_write apenas escreve em 1 bloco de 4KB, e nao
+			inode.inode[inode_index].isvalid = 1;	        // em apenas 1 inodo
+			inode.inode[inode_index].size = 0;		
 			for(int j = 0; j < POINTERS_PER_INODE; j++)
 				inode.inode[inode_index].direct[j] = 0;
 			inode.inode[inode_index].indirect = 0;
@@ -248,23 +249,64 @@ int fs_create()
 
 int fs_delete( int inumber )
 {
+
+	Debug<DELETE_TRAIT>::msg("fs_delete: ### BEGIN ###");
 	if(!MOUNTED) {
 		std::cout << "[ERROR] please mount first!" << std::endl;
 		return 0;
 	}
+	Debug<DELETE_TRAIT>::msg("fs_delete: checking inumber value");
 	union fs_block block;
 	disk_read(0, block.data);
 	if(inumber == 0 || inumber > block.super.ninodes){
 		std::cout << "[ERROR] inumber out of bounds!" << std::endl;
 		return 0;
 	}
+	if(inode_bitmap[inumber] == 0){
+		std::cout << "[ERROR] inode is not valid!" << std::endl;
+		return 0;
+	}
 	union fs_block inode;
+	union fs_block data;
+	for(int i = 0; i < DISK_BLOCK_SIZE; i++){ 	//criando um bloco vazio, para utilizar no block.data
+		data.data[i] = 0;
+	}
+
 	disk_read(inumber/INODES_PER_BLOCK + 1, inode.data);
 	int inode_index = inumber % INODES_PER_BLOCK;
+	
+	inode.inode[inode_index].isvalid = 0;		//comecando a deletar e liberar os blocos
+	inode.inode[inode_index].size = 0;
+	Debug<DELETE_TRAIT>::msg("fs_delete: cleaning direct pointers");
+	for(int i = 0; i < POINTERS_PER_INODE; i++){	//limpando os ponteiros diretos e seus blocos
+		if(inode.inode[inode_index].direct[i] != 0){
+			Debug<DELETE_TRAIT>::msg("fs_delete: found direct block " + std::to_string(inode.inode[inode_index].direct[i]) + " at direct pointer " + std::to_string(i));
+			disk_write(inode.inode[inode_index].direct[i], data.data);
+			data_bitmap[inode.inode[inode_index].direct[i]] = 0;
+			inode.inode[inode_index].direct[i] = 0;
+		}
+	}
 
+	if(inode.inode[inode_index].indirect != 0){
+		Debug<DELETE_TRAIT>::msg("fs_delete: inode have indirect block at " + std::to_string(inode.inode[inode_index].indirect));
+		union fs_block indirect;
+		disk_read(inode.inode[inode_index].indirect, indirect.data);
+		for(int i = 0 ; i < POINTERS_PER_BLOCK; i++) {
+			if (indirect.pointers[i] != 0) {
+				Debug<DELETE_TRAIT>::msg("fs_delete: found indirect block " + std::to_string(indirect.pointers[i]));
+				disk_write(indirect.pointers[i], data.data);
+				data_bitmap[indirect.pointers[i]] = 0;
+				indirect.pointers[i] = 0;
+			}
+		}
+		disk_write(inode.inode[inode_index].indirect, data.data);
+		data_bitmap[inode.inode[inode_index].indirect] = 0;
+		inode.inode[inode_index].indirect = 0;
+	}
 
-
-
+	inode_bitmap[inumber] = 0;
+	disk_write(inumber/INODES_PER_BLOCK + 1, inode.data);
+	Debug<DELETE_TRAIT>::msg("fs_delete: ### END ###");
 	return 1;
 }
 

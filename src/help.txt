@@ -31,3 +31,7 @@ int  disk_size();
 void disk_read( int blocknum, char *data );
 void disk_write( int blocknum, const char *data );
 void disk_close();
+
+lendo os valores das imagens em hexa(vai brasil):
+
+
