@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <string>
 #include <vector>
+#include <cmath>
 
 const int FS_MAGIC           = 0xf0f03410;
 const int INODES_PER_BLOCK   = 128;
@@ -16,8 +17,9 @@ const int POINTERS_PER_BLOCK = 1024;
 // const int MOUNT_TRAIT = true;
 // const int DEBUG_TRAIT = false;
 
-#define MOUNT_TRAIT false
+#define MOUNT_TRAIT true
 #define DEBUG_TRAIT false
+#define FORMAT_TRAIT true
 
 bool MOUNTED = false;
 
@@ -53,6 +55,28 @@ union fs_block {
 
 int fs_format()
 {
+	Debug<FORMAT_TRAIT>::msg("fs_format: ### BEGIN ###");
+	if(MOUNTED){
+		std::cout << "[ERROR] can't format, already mounted!" << std::endl;
+		return 0;
+	}
+
+	union fs_block block;
+	for(int i = 0; i < DISK_BLOCK_SIZE; i++){
+		block.data[i] = 0;
+	}
+
+		for(int i = 0 ; i < disk_size(); i++) {
+			disk_write(i,block.data);
+		}
+	Debug<FORMAT_TRAIT>::msg("fs_format: disk cleaned");
+	
+	block.super.magic = FS_MAGIC;
+	block.super.nblocks = disk_size();
+	block.super.ninodeblocks = std::ceil(block.super.nblocks/10.0);
+	block.super.ninodes = block.super.ninodeblocks * INODES_PER_BLOCK;
+	disk_write(0,block.data);
+	Debug<FORMAT_TRAIT>::msg("fs_format: ### END ###");
 	return 1;
 }
 
@@ -177,15 +201,20 @@ int fs_mount()
 			}
 		}
 	}
+	Debug<MOUNT_TRAIT>::msg("fs_mount: FILLING DATA BITMAP WITH INODES AND SUPER");
+	data_bitmap[0] = 1;
+	for(int i = 0; i < block.super.ninodeblocks; i++)
+		data_bitmap[i+1] = 1;
+
 	MOUNTED = true;
 
 	#if MOUNT_TRAIT == 1
 		for(auto i : data_bitmap)
 			std::cout << i;
 		std::cout << std::endl;
-		// for(auto i : inode_bitmap)
-		// 	std::cout << i;
-		// std::cout << std::endl;
+		for(auto i : inode_bitmap)
+			std::cout << i;
+		std::cout << std::endl;
 	#endif
 
 	Debug<MOUNT_TRAIT>::msg("fs_mount: ### END ###");
