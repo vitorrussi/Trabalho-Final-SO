@@ -4,10 +4,10 @@ const int POINTERS_PER_INODE = 5;
 const int POINTERS_PER_BLOCK = 1024;
 
 struct fs_superblock {
-	int magic;
-	int nblocks;
-	int ninodeblocks;
-	int ninodes;
+	int magic; //numero magico
+	int nblocks; //numero de blocos total
+	int ninodeblocks; //blocos reservados para inodos
+	int ninodes; //num total de inodos
 };
 
 struct fs_inode {
@@ -34,4 +34,13 @@ void disk_close();
 
 lendo os valores das imagens em hexa(vai brasil):
 
+/*
+Um disco eh inicializado com um superbloco, 10% do tamanho total para inodos
+e o resto de blocos de dados.
 
+Se indirect referenciar a um numero, este numero e o bloco contera o vetor
+pointers informando quais blocos sao referenciados indiretamente.
+
+Union faz que que as estruturas contidas nela, compartilhem o mesmo endereco,
+sendo que o tamanho da union eh o da maior estrutura contida nela.
+*/
