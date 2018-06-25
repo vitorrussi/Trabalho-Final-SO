@@ -330,20 +330,26 @@ int fs_getsize( int inumber )
 
 	if(inumber < block.super.ninodes && inode_bitmap[inumber] != 0){
 
+		Debug<GETSIZE_TRAIT>::msg("fs_getsize: Enter inodo block ");
 		union fs_block inode;
 		disk_read(inumber/INODES_PER_BLOCK + 1, inode.data);
 		for(int i = 0;i < POINTERS_PER_INODE; i++){
 			if(inode.inode[inumber%INODES_PER_BLOCK].direct[i] != 0)
 				n_blocks++;
 		}
+
+		Debug<GETSIZE_TRAIT>::msg("fs_getsize: Blocks directs active: " + std::to_string(n_blocks));
+
 		if(inode.inode[inumber%INODES_PER_BLOCK].indirect != 0){
 			union fs_block indirect;
 			disk_read(inode.inode[inumber%INODES_PER_BLOCK].indirect, indirect.data);
+			Debug<GETSIZE_TRAIT>::msg("fs_getsize: Count indirect blocks");
 			for(int i = 0; i < POINTERS_PER_BLOCK; i++){
 				if(indirect.pointers[i] != 0)
 					n_blocks++;
 			}
 		}
+		Debug<GETSIZE_TRAIT>::msg("fs_getsize: Blocks total: " + std::to_string(n_blocks));
 		return n_blocks * 4096;
 	}
 

@@ -43,4 +43,9 @@ pointers informando quais blocos sao referenciados indiretamente.
 
 Union faz que que as estruturas contidas nela, compartilhem o mesmo endereco,
 sendo que o tamanho da union eh o da maior estrutura contida nela.
+
+Os dados sao salvos no disco, os valores no data_bitmap, sao apenas os valores
+que para passar para a funcao disk_read, e o ponteiro de dados union.data.
+
+A variavel indirect, indica um bloco que contem ponteiros indiretos de dados.
 */
