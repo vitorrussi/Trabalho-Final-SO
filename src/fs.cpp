@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 #include <cmath>
+#include <cstring>
 
 const int FS_MAGIC           = 0xf0f03410;
 const int INODES_PER_BLOCK   = 128;
@@ -21,6 +22,7 @@ const int POINTERS_PER_BLOCK = 1024;
 #define DEBUG_TRAIT false
 #define FORMAT_TRAIT true
 #define DELETE_TRAIT true
+#define READ_TRAIT true
 
 bool MOUNTED = false;
 
@@ -244,6 +246,7 @@ int fs_create()
 			return i;
 		}
 	}
+	std::cout << "[ERROR] no available inode" << std::endl;
 	return 0;
 }
 
@@ -316,16 +319,71 @@ int fs_getsize( int inumber )
 		std::cout << "[ERROR] please mount first!" << std::endl;
 		return -1;
 	}
+
 	return -1;
 }
 
 int fs_read( int inumber, char *data, int length, int offset )
 {
+	Debug<READ_TRAIT>::msg("fs_read: ### BEGIN ###");
 	if(!MOUNTED) {
 		std::cout << "[ERROR] please mount first!" << std::endl;
 		return 0;
 	}
-	return 0;
+	Debug<READ_TRAIT>::msg("fs_read: checking inumber value");
+	union fs_block block;
+	disk_read(0, block.data);
+	if(inumber == 0 || inumber > block.super.ninodes){
+		std::cout << "[ERROR] inumber out of bounds!" << std::endl;
+		return 0;
+	}
+	if(inode_bitmap[inumber] == 0){
+		std::cout << "[ERROR] inode is not valid!" << std::endl;
+		return 0;
+	}
+
+	Debug<READ_TRAIT>::msg("fs_read: begin reading data: \n\tinumber = " + std::to_string(inumber) + "\n\tlength = " + std::to_string(length) + "\n\toffset = " + std::to_string(offset));
+
+	union fs_block inode, data_block;
+
+	disk_read(inumber/INODES_PER_BLOCK + 1, inode.data);
+	int inode_index = inumber % INODES_PER_BLOCK;
+
+	int begin_block = offset / DISK_BLOCK_SIZE;
+	int begin_byte = offset % DISK_BLOCK_SIZE;
+
+	// if(inode.inode[inode_index].direct[begin_block] == 0) {
+	// 	std::cout << "[ERROR] data out of bounds!" << std::endl;
+	// 	return 0;
+	// }
+	Debug<READ_TRAIT>::msg("fs_read: begin block = " + std::to_string(begin_block));
+	Debug<READ_TRAIT>::msg("fs_read: begin byte = " + std::to_string(begin_byte));
+	int length_read, cursor = 0;
+	for(int i = begin_block; i < POINTERS_PER_INODE; i++) {
+		int length_read = length - begin_byte;
+		if (length_read > DISK_BLOCK_SIZE){
+			length_read = DISK_BLOCK_SIZE - begin_byte;
+		}
+		length -= length_read;
+		Debug<READ_TRAIT>::msg("fs_read: reading " + std::to_string(length_read) + " bytes, remaining " + std::to_string(length) + " bytes!");
+		#if READ_TRAIT == 1
+			if(length < 0){
+				std::cout << std::endl;
+				Debug<READ_TRAIT>::msg("fs_read: length < 0");
+			}
+		#endif
+		begin_byte = 0;
+		if(inode.inode[inode_index].direct[i] == 0) break;
+		disk_read(inode.inode[inode_index].direct[i],data_block.data);
+		std::memcpy(&data[cursor],data_block.data,length_read);
+		cursor += length_read;
+		if(length == 0) break;
+	}
+
+
+
+	Debug<READ_TRAIT>::msg("fs_read: ### END ###");
+	return cursor;
 }
 
 int fs_write( int inumber, const char *data, int length, int offset )
