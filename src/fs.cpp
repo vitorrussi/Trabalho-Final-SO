@@ -387,18 +387,30 @@ int fs_read( int inumber, char *data, int length, int offset )
 	// }
 	Debug<READ_TRAIT>::msg("fs_read: begin block = " + std::to_string(begin_block));
 	Debug<READ_TRAIT>::msg("fs_read: begin byte = " + std::to_string(begin_byte));
-	int length_read, cursor = 0;
+	int length_read, cursor = 0, size_left = inode.inode[inode_index].size - offset;
+	Debug<READ_TRAIT>::msg("fs_read: reading from directs");
+	//comecando a leitura dos blocos diretos
 	for(int i = begin_block; i < POINTERS_PER_INODE; i++) {
-		int length_read = length - begin_byte;
+		length_read = length - begin_byte;
 		if (length_read > DISK_BLOCK_SIZE){
 			length_read = DISK_BLOCK_SIZE - begin_byte;
 		}
+
+		if(length_read > size_left){
+			Debug<READ_TRAIT>::msg("fs_read: trying to read " + std::to_string(length_read) + " but size_left is " + std::to_string(size_left) + " bytes!");
+			length_read = size_left;
+		}
 		length -= length_read;
+		size_left -= length_read;
 		Debug<READ_TRAIT>::msg("fs_read: reading " + std::to_string(length_read) + " bytes, remaining " + std::to_string(length) + " bytes!");
 		#if READ_TRAIT == 1
 			if(length < 0){
 				std::cout << std::endl;
 				Debug<READ_TRAIT>::msg("fs_read: length < 0");
+			}
+			if(size_left < 0){
+				std::cout << std::endl;
+				Debug<READ_TRAIT>::msg("fs_read: size_left < 0");
 			}
 		#endif
 		begin_byte = 0;
@@ -406,7 +418,47 @@ int fs_read( int inumber, char *data, int length, int offset )
 		disk_read(inode.inode[inode_index].direct[i],data_block.data);
 		std::memcpy(&data[cursor],data_block.data,length_read);
 		cursor += length_read;
-		if(length == 0) break;
+		begin_block++;
+		if(length == 0 || size_left == 0) break;
+	}
+	Debug<READ_TRAIT>::msg("fs_read: finished reading from directs");
+	//comecando a leitura dos blocos diretos, caso haja
+
+	if(length > 0 && inode.inode[inode_index].indirect != 0) {
+		Debug<READ_TRAIT>::msg("fs_read: reading from indirects");
+		union fs_block indirect;
+		disk_read(inode.inode[inode_index].indirect, indirect.data);
+		for(int i = begin_block - POINTERS_PER_INODE; i < POINTERS_PER_BLOCK; i++) {
+			length_read = length - begin_byte;
+			if (length_read > DISK_BLOCK_SIZE){
+				length_read = DISK_BLOCK_SIZE - begin_byte;
+			}
+			if(length_read > size_left){
+				Debug<READ_TRAIT>::msg("fs_read: trying to read " + std::to_string(length_read) + " but size_left is " + std::to_string(size_left) + " bytes!");
+				length_read = size_left;
+			}
+			length -= length_read;
+			size_left -= length_read;
+			Debug<READ_TRAIT>::msg("fs_read: reading " + std::to_string(length_read) + " bytes, remaining " + std::to_string(length) + " bytes!");
+			#if READ_TRAIT == 1
+				if(length < 0){
+					std::cout << std::endl;
+					Debug<READ_TRAIT>::msg("fs_read: length < 0");
+				}
+				if(size_left < 0){
+					std::cout << std::endl;
+					Debug<READ_TRAIT>::msg("fs_read: size_left < 0");
+				}
+			#endif
+			begin_byte = 0;
+			if(indirect.pointers[i] == 0) break;
+			disk_read(indirect.pointers[i],data_block.data);
+			std::memcpy(&data[cursor],data_block.data,length_read);
+			cursor += length_read;
+			if(length == 0 || size_left == 0) break;
+		}
+		Debug<READ_TRAIT>::msg("fs_read: finished reading from indirects");
+
 	}
 
 
