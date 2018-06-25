@@ -23,6 +23,7 @@ const int POINTERS_PER_BLOCK = 1024;
 #define FORMAT_TRAIT true
 #define DELETE_TRAIT true
 #define READ_TRAIT true
+#define WRITE_TRAIT true
 #define GETSIZE_TRAIT true
 
 bool MOUNTED = false;
@@ -124,7 +125,7 @@ void fs_debug()
 				if(inode.inode[i%INODES_PER_BLOCK].direct[j] != 0){
 					if(!have_direct){std::cout << std::endl << "\tdirect blocks: "; have_direct = true;}
 					std::cout << inode.inode[i%INODES_PER_BLOCK].direct[j] << " ";
-				}
+				} 
 			}
 
 			if(inode.inode[i%INODES_PER_BLOCK].indirect != 0){
@@ -146,6 +147,7 @@ void fs_debug()
 
 	Debug<DEBUG_TRAIT>::msg("fs_debug: ### END ###");
 
+
 }
 
 int fs_mount()
@@ -158,13 +160,13 @@ int fs_mount()
 	data_bitmap.resize(block.super.nblocks, 0);
 	inode_bitmap.resize(block.super.ninodes, 0);
 
-	if(block.super.magic != FS_MAGIC){
-		Debug<MOUNT_TRAIT>::msg("fs_mount: magic number invalid");
+	if(block.super.magic != FS_MAGIC){			
+		Debug<MOUNT_TRAIT>::msg("fs_mount: magic number invalid");			 
 		return 0;
 	}
-
+		
 	Debug<MOUNT_TRAIT>::msg("fs_mount: magic number valid");
-
+	
 	Debug<MOUNT_TRAIT>::msg("fs_mount: CONSTRUCTING INODE BITMAP");
 
 	union fs_block inode;
@@ -172,9 +174,9 @@ int fs_mount()
 		disk_read(i+1, inode.data);
 		for(int j = 0; j < INODES_PER_BLOCK; j++){
 			if(inode.inode[j].isvalid == 1){
-				inode_bitmap[i*INODES_PER_BLOCK + j] = 1;
-				Debug<MOUNT_TRAIT>::msg("fs_mount: inode " + std::to_string(i*INODES_PER_BLOCK + j) + " valid!");
-				}
+				inode_bitmap[i*INODES_PER_BLOCK + j] = 1;				
+				Debug<MOUNT_TRAIT>::msg("fs_mount: inode " + std::to_string(i*INODES_PER_BLOCK + j) + " valid!");				
+				} 
 			else
 				inode_bitmap[i*INODES_PER_BLOCK + j] = 0;
 		}
@@ -189,7 +191,7 @@ int fs_mount()
 				if(inode.inode[i%INODES_PER_BLOCK].direct[j] != 0){
 					data_bitmap[inode.inode[i%INODES_PER_BLOCK].direct[j]] = 1;
 					Debug<MOUNT_TRAIT>::msg("fs_mount: inode " + std::to_string(i) + " has direct " + std::to_string(inode.inode[i%INODES_PER_BLOCK].direct[j]) + " being used!");
-				}
+				} 
 			}
 			if(inode.inode[i%INODES_PER_BLOCK].indirect != 0){
 				Debug<MOUNT_TRAIT>::msg("fs_mount: inode " + std::to_string(i) + " indirect block point to " + std::to_string(inode.inode[i%INODES_PER_BLOCK].indirect) + " block!");
@@ -237,7 +239,7 @@ int fs_create()
 			disk_read(i / INODES_PER_BLOCK + 1,inode.data);	// le o bloco inteiro de inodo onde o inodo ta, pq
 			int inode_index = i % INODES_PER_BLOCK;			// o disk_write apenas escreve em 1 bloco de 4KB, e nao
 			inode.inode[inode_index].isvalid = 1;	        // em apenas 1 inodo
-			inode.inode[inode_index].size = 0;
+			inode.inode[inode_index].size = 0;		
 			for(int j = 0; j < POINTERS_PER_INODE; j++)
 				inode.inode[inode_index].direct[j] = 0;
 			inode.inode[inode_index].indirect = 0;
@@ -277,7 +279,7 @@ int fs_delete( int inumber )
 
 	disk_read(inumber/INODES_PER_BLOCK + 1, inode.data);
 	int inode_index = inumber % INODES_PER_BLOCK;
-
+	
 	inode.inode[inode_index].isvalid = 0;		//comecando a deletar e liberar os blocos
 	inode.inode[inode_index].size = 0;
 	Debug<DELETE_TRAIT>::msg("fs_delete: cleaning direct pointers");
@@ -318,11 +320,11 @@ int fs_getsize( int inumber )
 
 	Debug<GETSIZE_TRAIT>::msg("fs_getsize: ### BEGIN ###");
 
-	if(!MOUNTED) {
-		std::cout << "[ERROR] please mount first!" << std::endl;
-		return -1;
-	}
-
+ 	if(!MOUNTED) {
+ 		std::cout << "[ERROR] please mount first!" << std::endl;
+ 		return -1;
+ 	}
+ 
 	union fs_block block;
 	disk_read(0,block.data);
 
@@ -330,32 +332,26 @@ int fs_getsize( int inumber )
 
 	if(inumber < block.super.ninodes && inode_bitmap[inumber] != 0){
 
-		Debug<GETSIZE_TRAIT>::msg("fs_getsize: Enter inodo block ");
 		union fs_block inode;
 		disk_read(inumber/INODES_PER_BLOCK + 1, inode.data);
 		for(int i = 0;i < POINTERS_PER_INODE; i++){
 			if(inode.inode[inumber%INODES_PER_BLOCK].direct[i] != 0)
 				n_blocks++;
 		}
-
-		Debug<GETSIZE_TRAIT>::msg("fs_getsize: Blocks directs active: " + std::to_string(n_blocks));
-
 		if(inode.inode[inumber%INODES_PER_BLOCK].indirect != 0){
 			union fs_block indirect;
 			disk_read(inode.inode[inumber%INODES_PER_BLOCK].indirect, indirect.data);
-			Debug<GETSIZE_TRAIT>::msg("fs_getsize: Count indirect blocks");
 			for(int i = 0; i < POINTERS_PER_BLOCK; i++){
 				if(indirect.pointers[i] != 0)
 					n_blocks++;
 			}
 		}
-		Debug<GETSIZE_TRAIT>::msg("fs_getsize: Blocks total: " + std::to_string(n_blocks));
 		return n_blocks * 4096;
 	}
 
 	Debug<GETSIZE_TRAIT>::msg("fs_getsize: ### END ###");
 
-	return -1;
+ 	return -1;
 }
 
 int fs_read( int inumber, char *data, int length, int offset )
@@ -387,10 +383,6 @@ int fs_read( int inumber, char *data, int length, int offset )
 	int begin_block = offset / DISK_BLOCK_SIZE;
 	int begin_byte = offset % DISK_BLOCK_SIZE;
 
-	// if(inode.inode[inode_index].direct[begin_block] == 0) {
-	// 	std::cout << "[ERROR] data out of bounds!" << std::endl;
-	// 	return 0;
-	// }
 	Debug<READ_TRAIT>::msg("fs_read: begin block = " + std::to_string(begin_block));
 	Debug<READ_TRAIT>::msg("fs_read: begin byte = " + std::to_string(begin_byte));
 	int length_read, cursor = 0, size_left = inode.inode[inode_index].size - offset;
@@ -419,10 +411,11 @@ int fs_read( int inumber, char *data, int length, int offset )
 				Debug<READ_TRAIT>::msg("fs_read: size_left < 0");
 			}
 		#endif
-		begin_byte = 0;
+		
 		if(inode.inode[inode_index].direct[i] == 0) break;
 		disk_read(inode.inode[inode_index].direct[i],data_block.data);
-		std::memcpy(&data[cursor],data_block.data,length_read);
+		std::memcpy(&data[cursor],&data_block.data[begin_byte],length_read);
+		begin_byte = 0;
 		cursor += length_read;
 		begin_block++;
 		if(length == 0 || size_left == 0) break;
@@ -456,10 +449,11 @@ int fs_read( int inumber, char *data, int length, int offset )
 					Debug<READ_TRAIT>::msg("fs_read: size_left < 0");
 				}
 			#endif
-			begin_byte = 0;
+			
 			if(indirect.pointers[i] == 0) break;
 			disk_read(indirect.pointers[i],data_block.data);
-			std::memcpy(&data[cursor],data_block.data,length_read);
+			std::memcpy(&data[cursor],&data_block.data[begin_byte],length_read);
+			begin_byte = 0;
 			cursor += length_read;
 			if(length == 0 || size_left == 0) break;
 		}
@@ -473,11 +467,158 @@ int fs_read( int inumber, char *data, int length, int offset )
 	return cursor;
 }
 
+int search_freeblock(){
+	for(int i = 0; i < data_bitmap.size(); i++){
+		if(data_bitmap[i] == 0) {
+			data_bitmap[i] = 1;
+			return i;
+		}
+	}
+	return -1;
+}
+
 int fs_write( int inumber, const char *data, int length, int offset )
 {
+	Debug<WRITE_TRAIT>::msg("fs_write: ### BEGIN ###");
 	if(!MOUNTED) {
 		std::cout << "[ERROR] please mount first!" << std::endl;
-		return 0;
+		return -1;
 	}
-	return 0;
+	if(data == NULL){
+		std::cout << "[ERROR] invalid buffer" << std::endl;
+	}
+	Debug<WRITE_TRAIT>::msg("fs_write: checking inumber value");
+	union fs_block block;
+	disk_read(0, block.data);
+	if(inumber == 0 || inumber > block.super.ninodes){
+		std::cout << "[ERROR] inumber out of bounds!" << std::endl;
+		return -1;
+	}
+	if(inode_bitmap[inumber] == 0){
+		std::cout << "[ERROR] inode is not valid!" << std::endl;
+		return -1;
+	}
+
+	Debug<WRITE_TRAIT>::msg("fs_write: begin writing data: \n\tinumber = " + std::to_string(inumber) + "\n\tlength = " + std::to_string(length) + "\n\toffset = " + std::to_string(offset));
+
+	union fs_block inode, data_block;
+
+	disk_read(inumber/INODES_PER_BLOCK + 1, inode.data);
+	int inode_index = inumber % INODES_PER_BLOCK;
+
+	int begin_block = offset / DISK_BLOCK_SIZE;
+	int begin_byte = offset % DISK_BLOCK_SIZE;
+
+	int end_block = (offset + length) / DISK_BLOCK_SIZE;
+	int end_byte = (offset + length) % DISK_BLOCK_SIZE;
+
+	int sizelimit_block = inode.inode[inode_index].size / DISK_BLOCK_SIZE;
+	int sizelimit_byte = inode.inode[inode_index].size % DISK_BLOCK_SIZE;
+
+	if(sizelimit_block == end_block){
+		if(sizelimit_byte < end_byte){
+			inode.inode[inode_index].size += end_byte - sizelimit_byte;
+			Debug<WRITE_TRAIT>::msg("fs_write: equal block inserting = " + std::to_string(end_byte - sizelimit_byte));
+			disk_write(inumber/INODES_PER_BLOCK + 1, inode.data);
+		}
+	} else if(sizelimit_block < end_block){
+		inode.inode[inode_index].size += (end_block - sizelimit_block) * DISK_BLOCK_SIZE + (end_byte - sizelimit_byte);
+		Debug<WRITE_TRAIT>::msg("fs_write: end block greater inserting = " + std::to_string((end_block - sizelimit_block) * DISK_BLOCK_SIZE + (end_byte - sizelimit_byte)));
+		disk_write(inumber/INODES_PER_BLOCK + 1, inode.data);
+	}
+
+	Debug<WRITE_TRAIT>::msg("fs_write: begin block = " + std::to_string(begin_block));
+	Debug<WRITE_TRAIT>::msg("fs_write: begin byte = " + std::to_string(begin_byte));
+	int length_write, cursor = 0;
+	Debug<WRITE_TRAIT>::msg("fs_write: writing in directs");
+
+	for(int i = begin_block; i < POINTERS_PER_INODE; i++) {
+		if(inode.inode[inode_index].direct[i] == 0){
+			int free_block = search_freeblock();
+			if(free_block == -1) {
+				std::cout << "[ERROR] there is no free space anymore" << std::endl;
+				return cursor;
+			}
+			inode.inode[inode_index].direct[i] = free_block;
+			disk_write(inumber/INODES_PER_BLOCK + 1, inode.data);
+		}
+		length_write = length - begin_byte;
+		if (length_write > DISK_BLOCK_SIZE){
+			length_write = DISK_BLOCK_SIZE - begin_byte;
+		}
+
+		length -= length_write;
+		Debug<WRITE_TRAIT>::msg("fs_write: writing " + std::to_string(length_write) + " bytes,");
+		#if WRITE_TRAIT == 1
+			if(length < 0){
+				std::cout << std::endl;
+				Debug<WRITE_TRAIT>::msg("fs_write: length < 0");
+			}
+		#endif
+		begin_byte = 0;
+		for(int i = 0; i < DISK_BLOCK_SIZE; i++){ 	
+			data_block.data[i] = 0;
+		}
+
+		std::memcpy(&data_block.data[begin_byte],&data[cursor],length_write);
+		disk_write(inode.inode[inode_index].direct[i],data_block.data);
+		cursor += length_write;
+		begin_block++;
+		if(length == 0) break;
+	}
+
+	if(length > 0) {
+		Debug<WRITE_TRAIT>::msg("fs_write: writing in indirects");
+		union fs_block indirect;
+		if(inode.inode[inode_index].indirect == 0) {
+			int free_block = search_freeblock();
+			if(free_block == -1){
+				std::cout << "[ERROR] there is no free space anymore" << std::endl;
+				return cursor;
+			}
+			inode.inode[inode_index].indirect = free_block;
+			disk_write(inumber/INODES_PER_BLOCK + 1, inode.data);
+		}
+		disk_read(inode.inode[inode_index].indirect, indirect.data);
+		for(int i = begin_block - POINTERS_PER_INODE; i < POINTERS_PER_BLOCK; i++) {
+			if(indirect.pointers[i] == 0){
+				int free_block = search_freeblock();
+				if(free_block == -1) {
+					std::cout << "[ERROR] there is no free space anymore" << std::endl;
+					return cursor;
+				}
+				indirect.pointers[i] = free_block;
+				disk_write(inode.inode[inode_index].indirect, indirect.data);
+			}
+			length_write = length - begin_byte;
+			if (length_write > DISK_BLOCK_SIZE){
+				length_write = DISK_BLOCK_SIZE - begin_byte;
+			}
+
+			length -= length_write;
+			Debug<WRITE_TRAIT>::msg("fs_write: writing " + std::to_string(length_write) + " bytes,");
+			#if WRITE_TRAIT == 1
+				if(length < 0){
+					std::cout << std::endl;
+					Debug<WRITE_TRAIT>::msg("fs_write: length < 0");
+				}
+			#endif
+			begin_byte = 0;
+			for(int i = 0; i < DISK_BLOCK_SIZE; i++){ 	
+				data_block.data[i] = 0;
+			}
+
+			std::memcpy(&data_block.data[begin_byte],&data[cursor],length_write);
+			disk_write(indirect.pointers[i],data_block.data);
+			cursor += length_write;
+			begin_block++;
+			if(length == 0) break;
+		}
+	}
+
+
+
+
+	Debug<WRITE_TRAIT>::msg("fs_write: ### END ###");
+	return cursor;
 }

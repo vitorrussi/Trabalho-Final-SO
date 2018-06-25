@@ -32,7 +32,8 @@ void disk_read( int blocknum, char *data );
 void disk_write( int blocknum, const char *data );
 void disk_close();
 
-lendo os valores das imagens em hexa(vai brasil):
+static int do_copyin( const char *filename, int inumber );
+static int do_copyout( int inumber, const char *filename );
 
 /*
 Um disco eh inicializado com um superbloco, 10% do tamanho total para inodos
@@ -43,9 +44,41 @@ pointers informando quais blocos sao referenciados indiretamente.
 
 Union faz que que as estruturas contidas nela, compartilhem o mesmo endereco,
 sendo que o tamanho da union eh o da maior estrutura contida nela.
-
-Os dados sao salvos no disco, os valores no data_bitmap, sao apenas os valores
-que para passar para a funcao disk_read, e o ponteiro de dados union.data.
-
-A variavel indirect, indica um bloco que contem ponteiros indiretos de dados.
 */
+	if(length > 0 && inode.inode[inode_index].indirect != 0) {
+		Debug<READ_TRAIT>::msg("fs_read: reading from indirects");
+		union fs_block indirect;
+		disk_read(inode.inode[inode_index].indirect, indirect.data);
+		for(int i = begin_block - POINTERS_PER_INODE; i < POINTERS_PER_BLOCK; i++) {
+			length_read = length - begin_byte;
+			if (length_read > DISK_BLOCK_SIZE){
+				length_read = DISK_BLOCK_SIZE - begin_byte;
+			}
+			if(length_read > size_left){
+				Debug<READ_TRAIT>::msg("fs_read: trying to read " + std::to_string(length_read) + " but size_left is " + std::to_string(size_left) + " bytes!");
+				length_read = size_left;
+			}
+			length -= length_read;
+			size_left -= length_read;
+			Debug<READ_TRAIT>::msg("fs_read: reading " + std::to_string(length_read) + " bytes, remaining " + std::to_string(length) + " bytes!");
+			#if READ_TRAIT == 1
+				if(length < 0){
+					std::cout << std::endl;
+					Debug<READ_TRAIT>::msg("fs_read: length < 0");
+				}
+				if(size_left < 0){
+					std::cout << std::endl;
+					Debug<READ_TRAIT>::msg("fs_read: size_left < 0");
+				}
+			#endif
+			
+			if(indirect.pointers[i] == 0) break;
+			disk_read(indirect.pointers[i],data_block.data);
+			std::memcpy(&data[cursor],&data_block.data[begin_byte],length_read);
+			begin_byte = 0;
+			cursor += length_read;
+			if(length == 0 || size_left == 0) break;
+		}
+		Debug<READ_TRAIT>::msg("fs_read: finished reading from indirects");
+
+	}
