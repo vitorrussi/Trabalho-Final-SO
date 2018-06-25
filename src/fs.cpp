@@ -215,10 +215,10 @@ int fs_mount()
 	#if MOUNT_TRAIT == 1
 		for(auto i : data_bitmap)
 			std::cout << i;
-		std::cout << std::endl;
+		std::cout << " --> data_bitmap" << std::endl;
 		for(auto i : inode_bitmap)
 			std::cout << i;
-		std::cout << std::endl;
+		std::cout << " --> inode_bitmap" << std::endl;
 	#endif
 
 	Debug<MOUNT_TRAIT>::msg("fs_mount: ### END ###");
