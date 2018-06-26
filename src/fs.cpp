@@ -125,7 +125,7 @@ void fs_debug()
 				if(inode.inode[i%INODES_PER_BLOCK].direct[j] != 0){
 					if(!have_direct){std::cout << std::endl << "\tdirect blocks: "; have_direct = true;}
 					std::cout << inode.inode[i%INODES_PER_BLOCK].direct[j] << " ";
-				} 
+				}
 			}
 
 			if(inode.inode[i%INODES_PER_BLOCK].indirect != 0){
@@ -160,13 +160,13 @@ int fs_mount()
 	data_bitmap.resize(block.super.nblocks, 0);
 	inode_bitmap.resize(block.super.ninodes, 0);
 
-	if(block.super.magic != FS_MAGIC){			
-		Debug<MOUNT_TRAIT>::msg("fs_mount: magic number invalid");			 
+	if(block.super.magic != FS_MAGIC){
+		Debug<MOUNT_TRAIT>::msg("fs_mount: magic number invalid");
 		return 0;
 	}
-		
+
 	Debug<MOUNT_TRAIT>::msg("fs_mount: magic number valid");
-	
+
 	Debug<MOUNT_TRAIT>::msg("fs_mount: CONSTRUCTING INODE BITMAP");
 
 	union fs_block inode;
@@ -174,9 +174,9 @@ int fs_mount()
 		disk_read(i+1, inode.data);
 		for(int j = 0; j < INODES_PER_BLOCK; j++){
 			if(inode.inode[j].isvalid == 1){
-				inode_bitmap[i*INODES_PER_BLOCK + j] = 1;				
-				Debug<MOUNT_TRAIT>::msg("fs_mount: inode " + std::to_string(i*INODES_PER_BLOCK + j) + " valid!");				
-				} 
+				inode_bitmap[i*INODES_PER_BLOCK + j] = 1;
+				Debug<MOUNT_TRAIT>::msg("fs_mount: inode " + std::to_string(i*INODES_PER_BLOCK + j) + " valid!");
+				}
 			else
 				inode_bitmap[i*INODES_PER_BLOCK + j] = 0;
 		}
@@ -191,7 +191,7 @@ int fs_mount()
 				if(inode.inode[i%INODES_PER_BLOCK].direct[j] != 0){
 					data_bitmap[inode.inode[i%INODES_PER_BLOCK].direct[j]] = 1;
 					Debug<MOUNT_TRAIT>::msg("fs_mount: inode " + std::to_string(i) + " has direct " + std::to_string(inode.inode[i%INODES_PER_BLOCK].direct[j]) + " being used!");
-				} 
+				}
 			}
 			if(inode.inode[i%INODES_PER_BLOCK].indirect != 0){
 				Debug<MOUNT_TRAIT>::msg("fs_mount: inode " + std::to_string(i) + " indirect block point to " + std::to_string(inode.inode[i%INODES_PER_BLOCK].indirect) + " block!");
@@ -239,7 +239,7 @@ int fs_create()
 			disk_read(i / INODES_PER_BLOCK + 1,inode.data);	// le o bloco inteiro de inodo onde o inodo ta, pq
 			int inode_index = i % INODES_PER_BLOCK;			// o disk_write apenas escreve em 1 bloco de 4KB, e nao
 			inode.inode[inode_index].isvalid = 1;	        // em apenas 1 inodo
-			inode.inode[inode_index].size = 0;		
+			inode.inode[inode_index].size = 0;
 			for(int j = 0; j < POINTERS_PER_INODE; j++)
 				inode.inode[inode_index].direct[j] = 0;
 			inode.inode[inode_index].indirect = 0;
@@ -279,7 +279,7 @@ int fs_delete( int inumber )
 
 	disk_read(inumber/INODES_PER_BLOCK + 1, inode.data);
 	int inode_index = inumber % INODES_PER_BLOCK;
-	
+
 	inode.inode[inode_index].isvalid = 0;		//comecando a deletar e liberar os blocos
 	inode.inode[inode_index].size = 0;
 	Debug<DELETE_TRAIT>::msg("fs_delete: cleaning direct pointers");
@@ -324,7 +324,7 @@ int fs_getsize( int inumber )
  		std::cout << "[ERROR] please mount first!" << std::endl;
  		return -1;
  	}
- 
+
 	union fs_block block;
 	disk_read(0,block.data);
 
@@ -411,7 +411,7 @@ int fs_read( int inumber, char *data, int length, int offset )
 				Debug<READ_TRAIT>::msg("fs_read: size_left < 0");
 			}
 		#endif
-		
+
 		if(inode.inode[inode_index].direct[i] == 0) break;
 		disk_read(inode.inode[inode_index].direct[i],data_block.data);
 		std::memcpy(&data[cursor],&data_block.data[begin_byte],length_read);
@@ -449,7 +449,7 @@ int fs_read( int inumber, char *data, int length, int offset )
 					Debug<READ_TRAIT>::msg("fs_read: size_left < 0");
 				}
 			#endif
-			
+
 			if(indirect.pointers[i] == 0) break;
 			disk_read(indirect.pointers[i],data_block.data);
 			std::memcpy(&data[cursor],&data_block.data[begin_byte],length_read);
@@ -564,7 +564,7 @@ int fs_write( int inumber, const char *data, int length, int offset )
 			}
 		#endif
 		begin_byte = 0;
-		for(int i = 0; i < DISK_BLOCK_SIZE; i++){ 	
+		for(int i = 0; i < DISK_BLOCK_SIZE; i++){
 			data_block.data[i] = 0;
 		}
 
@@ -617,7 +617,7 @@ int fs_write( int inumber, const char *data, int length, int offset )
 				}
 			#endif
 			begin_byte = 0;
-			for(int i = 0; i < DISK_BLOCK_SIZE; i++){ 	
+			for(int i = 0; i < DISK_BLOCK_SIZE; i++){
 				data_block.data[i] = 0;
 			}
 
