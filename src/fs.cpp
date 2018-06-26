@@ -18,13 +18,13 @@ const int POINTERS_PER_BLOCK = 1024;
 // const int MOUNT_TRAIT = true;
 // const int DEBUG_TRAIT = false;
 
-#define MOUNT_TRAIT true
+#define MOUNT_TRAIT false
 #define DEBUG_TRAIT false
-#define FORMAT_TRAIT true
-#define DELETE_TRAIT true
-#define READ_TRAIT true
-#define WRITE_TRAIT true
-#define GETSIZE_TRAIT true
+#define FORMAT_TRAIT false
+#define DELETE_TRAIT false
+#define READ_TRAIT false
+#define WRITE_TRAIT false
+#define GETSIZE_TRAIT false
 
 bool MOUNTED = false;
 
@@ -477,6 +477,30 @@ int search_freeblock(){
 	return -1;
 }
 
+void update_size(int inumber,int offset, int length){
+	union fs_block inode;
+	disk_read(inumber/INODES_PER_BLOCK + 1, inode.data);
+	int inode_index = inumber % INODES_PER_BLOCK;
+
+	int sizelimit_block = inode.inode[inode_index].size / DISK_BLOCK_SIZE;
+	int sizelimit_byte = inode.inode[inode_index].size % DISK_BLOCK_SIZE;
+
+	int end_block = (offset + length) / DISK_BLOCK_SIZE;
+	int end_byte = (offset + length) % DISK_BLOCK_SIZE;
+
+	if(sizelimit_block == end_block){
+		if(sizelimit_byte < end_byte){
+			inode.inode[inode_index].size += end_byte - sizelimit_byte;
+			Debug<WRITE_TRAIT>::msg("update_size: equal block inserting = " + std::to_string(end_byte - sizelimit_byte));
+			disk_write(inumber/INODES_PER_BLOCK + 1, inode.data);
+		}
+	} else if(sizelimit_block < end_block){
+		inode.inode[inode_index].size += (end_block - sizelimit_block) * DISK_BLOCK_SIZE + (end_byte - sizelimit_byte);
+		Debug<WRITE_TRAIT>::msg("update_size: end block greater inserting = " + std::to_string((end_block - sizelimit_block) * DISK_BLOCK_SIZE + (end_byte - sizelimit_byte)));
+		disk_write(inumber/INODES_PER_BLOCK + 1, inode.data);
+	}
+}
+
 int fs_write( int inumber, const char *data, int length, int offset )
 {
 	Debug<WRITE_TRAIT>::msg("fs_write: ### BEGIN ###");
@@ -509,24 +533,6 @@ int fs_write( int inumber, const char *data, int length, int offset )
 	int begin_block = offset / DISK_BLOCK_SIZE;
 	int begin_byte = offset % DISK_BLOCK_SIZE;
 
-	int end_block = (offset + length) / DISK_BLOCK_SIZE;
-	int end_byte = (offset + length) % DISK_BLOCK_SIZE;
-
-	int sizelimit_block = inode.inode[inode_index].size / DISK_BLOCK_SIZE;
-	int sizelimit_byte = inode.inode[inode_index].size % DISK_BLOCK_SIZE;
-
-	if(sizelimit_block == end_block){
-		if(sizelimit_byte < end_byte){
-			inode.inode[inode_index].size += end_byte - sizelimit_byte;
-			Debug<WRITE_TRAIT>::msg("fs_write: equal block inserting = " + std::to_string(end_byte - sizelimit_byte));
-			disk_write(inumber/INODES_PER_BLOCK + 1, inode.data);
-		}
-	} else if(sizelimit_block < end_block){
-		inode.inode[inode_index].size += (end_block - sizelimit_block) * DISK_BLOCK_SIZE + (end_byte - sizelimit_byte);
-		Debug<WRITE_TRAIT>::msg("fs_write: end block greater inserting = " + std::to_string((end_block - sizelimit_block) * DISK_BLOCK_SIZE + (end_byte - sizelimit_byte)));
-		disk_write(inumber/INODES_PER_BLOCK + 1, inode.data);
-	}
-
 	Debug<WRITE_TRAIT>::msg("fs_write: begin block = " + std::to_string(begin_block));
 	Debug<WRITE_TRAIT>::msg("fs_write: begin byte = " + std::to_string(begin_byte));
 	int length_write, cursor = 0;
@@ -537,6 +543,8 @@ int fs_write( int inumber, const char *data, int length, int offset )
 			int free_block = search_freeblock();
 			if(free_block == -1) {
 				std::cout << "[ERROR] there is no free space anymore" << std::endl;
+				update_size(inumber,offset, cursor);
+				update_size(inumber,offset, cursor);
 				return cursor;
 			}
 			inode.inode[inode_index].direct[i] = free_block;
@@ -566,14 +574,18 @@ int fs_write( int inumber, const char *data, int length, int offset )
 		begin_block++;
 		if(length == 0) break;
 	}
-
+	int freespace = 0;
+	for(auto i:data_bitmap)
+		if(i == 1)
+			freespace++;
 	if(length > 0) {
 		Debug<WRITE_TRAIT>::msg("fs_write: writing in indirects");
 		union fs_block indirect;
 		if(inode.inode[inode_index].indirect == 0) {
 			int free_block = search_freeblock();
-			if(free_block == -1){
+			if(free_block == -1 || freespace < 1){
 				std::cout << "[ERROR] there is no free space anymore" << std::endl;
+				update_size(inumber,offset, cursor);
 				return cursor;
 			}
 			inode.inode[inode_index].indirect = free_block;
@@ -585,6 +597,7 @@ int fs_write( int inumber, const char *data, int length, int offset )
 				int free_block = search_freeblock();
 				if(free_block == -1) {
 					std::cout << "[ERROR] there is no free space anymore" << std::endl;
+					update_size(inumber,offset, cursor);
 					return cursor;
 				}
 				indirect.pointers[i] = free_block;
@@ -620,5 +633,6 @@ int fs_write( int inumber, const char *data, int length, int offset )
 
 
 	Debug<WRITE_TRAIT>::msg("fs_write: ### END ###");
+	update_size(inumber,offset, cursor);
 	return cursor;
 }
