@@ -31,6 +31,7 @@ int  disk_size();
 void disk_read( int blocknum, char *data );
 void disk_write( int blocknum, const char *data );
 void disk_close();
+int aux_findid(int inumber); //procurar qual inodo esta referenciado o dado inumber
 
 static int do_copyin( const char *filename, int inumber );
 static int do_copyout( int inumber, const char *filename );
@@ -71,7 +72,7 @@ sendo que o tamanho da union eh o da maior estrutura contida nela.
 					Debug<READ_TRAIT>::msg("fs_read: size_left < 0");
 				}
 			#endif
-			
+
 			if(indirect.pointers[i] == 0) break;
 			disk_read(indirect.pointers[i],data_block.data);
 			std::memcpy(&data[cursor],&data_block.data[begin_byte],length_read);

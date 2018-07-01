@@ -25,6 +25,7 @@ const int POINTERS_PER_BLOCK = 1024;
 #define READ_TRAIT false
 #define WRITE_TRAIT false
 #define GETSIZE_TRAIT false
+#define DEFRAG_TRAIT false
 
 bool MOUNTED = false;
 
@@ -146,8 +147,6 @@ void fs_debug()
 	}
 
 	Debug<DEBUG_TRAIT>::msg("fs_debug: ### END ###");
-
-
 }
 
 int fs_mount()
@@ -461,8 +460,6 @@ int fs_read( int inumber, char *data, int length, int offset )
 
 	}
 
-
-
 	Debug<READ_TRAIT>::msg("fs_read: ### END ###");
 	return cursor;
 }
@@ -629,10 +626,351 @@ int fs_write( int inumber, const char *data, int length, int offset )
 		}
 	}
 
-
-
-
 	Debug<WRITE_TRAIT>::msg("fs_write: ### END ###");
 	update_size(inumber,offset, cursor);
 	return cursor;
+}
+
+int aux_findid (int iblock){ //Erro nessa funcao
+
+	union fs_block block;
+	union fs_block inode;
+
+	disk_read(0,block.data);
+
+	Debug<DEFRAG_TRAIT>::msg("aux_findid: enter in funciton, search inode for append block " + std::to_string(iblock));
+
+	for (int i = 0; i < block.super.ninodes; i++) {
+		if(inode_bitmap[i] == 1) {
+			disk_read(i/INODES_PER_BLOCK + 1, inode.data);
+
+			Debug<DEFRAG_TRAIT>::msg("aux_findid: enter in block " + std::to_string(i/INODES_PER_BLOCK + 1) + " inode " + std::to_string(i));
+
+			for(int j = 0 ; j < POINTERS_PER_INODE; j++){
+				if(inode.inode[i%INODES_PER_BLOCK].direct[j] == iblock){
+					Debug<DEFRAG_TRAIT>::msg("aux_findid: find append " + std::to_string(iblock) + " in inode " + std::to_string(i%INODES_PER_BLOCK) + " per direct pointer");
+					return i;
+				}
+			}
+			if(inode.inode[i%INODES_PER_BLOCK].indirect != 0){
+				if(inode.inode[i%INODES_PER_BLOCK].indirect == iblock){
+					return i;
+				}
+				union fs_block indirect;
+				disk_read(inode.inode[i%INODES_PER_BLOCK].indirect, indirect.data);
+				for(int j = 0; j < POINTERS_PER_BLOCK; j++){
+					if(indirect.pointers[j] == iblock){
+						Debug<DEFRAG_TRAIT>::msg("aux_findid: find append" + std::to_string(iblock) + " in inode " + std::to_string(i%INODES_PER_BLOCK) + " per indirect pointer " + std::to_string(j));
+						return i;
+					}
+				}
+			}
+		}
+	}
+
+	return -1;
+}
+
+int fs_defrag (){
+
+	Debug<DEFRAG_TRAIT>::msg("fs_defrag: ### BEGIN ###");
+
+	if(!MOUNTED) {
+		std::cout << "[ERROR] please mount first!" << std::endl;
+		return 0;
+	}
+
+	Debug<DEFRAG_TRAIT>::msg("fs_defrag: begin defrag, initializing ready disk");
+
+	union fs_block block;
+
+	disk_read(0,block.data);
+
+	if(block.super.magic != FS_MAGIC){
+		std::cout << "[ERROR] magic number is invalid" << std::endl;
+		return 0;
+	}
+
+	int pos = block.super.ninodeblocks + 1;
+
+	int var_aux = 0;
+	union fs_block inode;
+	union fs_block indirect;
+	union fs_block data;
+	union fs_block aux;
+	int inodo_change;
+
+	for (int i = 0; i < block.super.ninodes; i++) {
+
+		Debug<DEFRAG_TRAIT>::msg("fs_defrag: verific inode " + std::to_string(i));
+
+		if(inode_bitmap[i] == 1) {
+
+			Debug<DEFRAG_TRAIT>::msg("fs_defrag: inode " + std::to_string(i) + " is used");
+
+			disk_read(i/INODES_PER_BLOCK + 1, inode.data);
+
+			for(int j = 0 ; j < POINTERS_PER_INODE; j++){
+				if(inode.inode[i%INODES_PER_BLOCK].direct[j] == pos){
+					Debug<DEFRAG_TRAIT>::msg("fs_defrag: inode " + std::to_string(i) + " direct pointer " + std::to_string(j) + " already ordered");
+
+					pos++;
+					if(pos == block.super.nblocks){
+						return 1;
+					}
+				}
+				else if(inode.inode[i%INODES_PER_BLOCK].direct[j] != 0){
+
+					Debug<DEFRAG_TRAIT>::msg("fs_defrag: inode " + std::to_string(i) + " direct pointer " + std::to_string(j) + " ordering");
+
+					if(data_bitmap[pos] ==  1){
+
+						disk_read(pos, aux.data);
+						disk_read(inode.inode[i%INODES_PER_BLOCK].direct[j], data.data);
+						disk_write(pos,data.data);
+						disk_write(inode.inode[i%INODES_PER_BLOCK].direct[j],aux.data);
+
+						inodo_change = aux_findid(pos);
+
+						disk_read(inodo_change/INODES_PER_BLOCK + 1,aux.data);
+						var_aux = 0;
+						for(int k = 0;k < POINTERS_PER_INODE; k++){
+							if(aux.inode[inodo_change%INODES_PER_BLOCK].direct[k] == pos){
+								if(inodo_change/INODES_PER_BLOCK != i/INODES_PER_BLOCK){
+									aux.inode[inodo_change%INODES_PER_BLOCK].direct[k] = inode.inode[i%INODES_PER_BLOCK].direct[j];
+									disk_write(inodo_change/INODES_PER_BLOCK + 1,aux.data);
+								}
+								else{
+									inode.inode[inodo_change%INODES_PER_BLOCK].direct[k] = inode.inode[i%INODES_PER_BLOCK].direct[j];
+								}
+								Debug<DEFRAG_TRAIT>::msg("fs_defrag: inode " + std::to_string(i) + " direct pointer " + std::to_string(j) + " change data with inode " + std::to_string(inodo_change) + " direct pointer " + std::to_string(k));
+								if(DEFRAG_TRAIT){
+									disk_write(i/INODES_PER_BLOCK + 1, inode.data);
+									fs_debug();
+								}
+								var_aux = 1; //if pos refereced for direct pointer
+								break;
+							}
+						}
+						if(var_aux == 0){ //if pos refereced for indirect pointer
+							if(aux.inode[inodo_change%INODES_PER_BLOCK].indirect == pos){
+								if(inodo_change/INODES_PER_BLOCK != i/INODES_PER_BLOCK){
+									aux.inode[inodo_change%INODES_PER_BLOCK].indirect = inode.inode[i%INODES_PER_BLOCK].direct[j];
+									disk_write(inodo_change/INODES_PER_BLOCK + 1,aux.data);
+								}else{
+									inode.inode[inodo_change%INODES_PER_BLOCK].indirect = inode.inode[i%INODES_PER_BLOCK].direct[j];
+								}
+								if(DEFRAG_TRAIT){
+									disk_write(i/INODES_PER_BLOCK + 1, inode.data);
+									fs_debug();
+								}
+								Debug<DEFRAG_TRAIT>::msg("fs_defrag: inode " + std::to_string(i) + " direct pointer " + std::to_string(j) + " change data with inode " + std::to_string(inodo_change) + " indirect pointer");
+							}
+							else{
+								var_aux = aux.inode[inodo_change%INODES_PER_BLOCK].indirect;
+								disk_read(var_aux, aux.data);
+								for(int k = 0;k < POINTERS_PER_BLOCK;k++){
+									if(aux.pointers[k] == pos){
+										aux.pointers[k] = inode.inode[i%INODES_PER_BLOCK].direct[j];
+										disk_write(var_aux, aux.data);
+										Debug<DEFRAG_TRAIT>::msg("fs_defrag: inode " + std::to_string(i) + " direct pointer " + std::to_string(j) + " change data with inode " + std::to_string(inodo_change) + " indirect pointer " + std::to_string(k));
+										break;
+									}
+								}
+							}
+						}
+					}
+					else{
+						Debug<DEFRAG_TRAIT>::msg("fs_defrag: inode " + std::to_string(i) + " direct pointer " + std::to_string(j) + " change data for pos " + std::to_string(pos));
+
+						disk_read(inode.inode[i%INODES_PER_BLOCK].direct[j], data.data);
+						disk_write(pos,data.data);
+						data_bitmap[inode.inode[i%INODES_PER_BLOCK].direct[j]] = 0;
+						data_bitmap[pos] = 1;
+					}
+					inode.inode[i%INODES_PER_BLOCK].direct[j] = pos;
+					Debug<DEFRAG_TRAIT>::msg("fs_defrag: inode " + std::to_string(i) + " direct pointer changed finished");
+					pos++;
+					if(pos == block.super.nblocks){
+						return 1;
+					}
+				}
+				disk_write(i/INODES_PER_BLOCK + 1, inode.data);
+			}
+			if(inode.inode[i%INODES_PER_BLOCK].indirect == pos){
+				Debug<DEFRAG_TRAIT>::msg("fs_defrag: inode " + std::to_string(i) + " indirect pointer " + std::to_string(inode.inode[i%INODES_PER_BLOCK].indirect) + " already ordened");
+				pos++;
+				if(pos == block.super.nblocks){
+					return 1;
+				}
+			}
+			else if(inode.inode[i%INODES_PER_BLOCK].indirect != 0){
+				if(data_bitmap[pos] == 1){
+					disk_read(pos, aux.data);
+					disk_read(inode.inode[i%INODES_PER_BLOCK].indirect, data.data);
+					disk_write(pos,data.data);
+					disk_write(inode.inode[i%INODES_PER_BLOCK].indirect,aux.data);
+
+					inodo_change = aux_findid(pos);
+
+					Debug<DEFRAG_TRAIT>::msg("fs_defrag: inode " + std::to_string(i) + " indirect pointer change data with inode " + std::to_string(inodo_change));
+
+					disk_read(inodo_change/INODES_PER_BLOCK + 1,aux.data);
+					var_aux = 0;
+					for(int k = 0;k < POINTERS_PER_INODE; k++){
+						if(aux.inode[inodo_change%INODES_PER_BLOCK].direct[k] == pos){
+							if(inodo_change/INODES_PER_BLOCK != i/INODES_PER_BLOCK){
+								aux.inode[inodo_change%INODES_PER_BLOCK].direct[k] = inode.inode[i%INODES_PER_BLOCK].indirect;
+								disk_write(inodo_change/INODES_PER_BLOCK + 1,aux.data);
+							}else{
+								inode.inode[inodo_change%INODES_PER_BLOCK].direct[k] = inode.inode[i%INODES_PER_BLOCK].indirect;
+							}
+							Debug<DEFRAG_TRAIT>::msg("fs_defrag: inode " + std::to_string(i) + " indirect pointer change data with inode " + std::to_string(inodo_change) + " direct pointer " + std::to_string(k));
+							if(DEFRAG_TRAIT){
+								disk_write(i/INODES_PER_BLOCK + 1, inode.data);
+								fs_debug();
+							}
+							var_aux = 1; //if pos refereced for direct pointer
+							break;
+						}
+					}
+					if(var_aux == 0){ //if pos refereced for indirect pointer
+						if(aux.inode[inodo_change%INODES_PER_BLOCK].indirect == pos){
+							if(inodo_change/INODES_PER_BLOCK != i/INODES_PER_BLOCK){
+								aux.inode[inodo_change%INODES_PER_BLOCK].indirect = inode.inode[i%INODES_PER_BLOCK].indirect;
+								disk_write(inodo_change/INODES_PER_BLOCK + 1,aux.data);
+							}
+							else{
+								inode.inode[inodo_change%INODES_PER_BLOCK].indirect = inode.inode[i%INODES_PER_BLOCK].indirect;
+							}
+							if(DEFRAG_TRAIT){
+								disk_write(i/INODES_PER_BLOCK + 1, inode.data);
+								fs_debug();
+							}
+							Debug<DEFRAG_TRAIT>::msg("fs_defrag: inode " + std::to_string(i) + " indirect pointer change data with inode " + std::to_string(inodo_change) + " indirect pointer");
+						}
+						else{
+							var_aux = aux.inode[inodo_change%INODES_PER_BLOCK].indirect;
+							disk_read(var_aux, aux.data);
+							for(int k = 0;k < POINTERS_PER_BLOCK;k++){
+								if(aux.pointers[k] == pos){
+									aux.pointers[k] = inode.inode[i%INODES_PER_BLOCK].indirect;
+									disk_write(var_aux, aux.data);
+									Debug<DEFRAG_TRAIT>::msg("fs_defrag: inode " + std::to_string(i) + " indirect pointer change data with inode " + std::to_string(inodo_change) + " indirect pointer " + std::to_string(k));
+									break;
+								}
+							}
+						}
+					}
+				}
+				else{
+					Debug<DEFRAG_TRAIT>::msg("fs_defrag: inode " + std::to_string(i) + " indirect pointer change data for pos " + std::to_string(pos));
+
+					disk_read(inode.inode[i%INODES_PER_BLOCK].indirect, data.data);
+					disk_write(pos,data.data);
+					data_bitmap[inode.inode[i%INODES_PER_BLOCK].indirect] = 0;
+					data_bitmap[pos] = 1;
+				}
+				inode.inode[i%INODES_PER_BLOCK].indirect = pos;
+				Debug<DEFRAG_TRAIT>::msg("fs_defrag: inode " + std::to_string(i) + " indirect pointer changed finished");
+				pos++;
+				if(pos == block.super.nblocks){
+					return 1;
+				}
+			}
+			if(inode.inode[i%INODES_PER_BLOCK].indirect != 0){
+				disk_read(inode.inode[i%INODES_PER_BLOCK].indirect, indirect.data);
+				for(int j = 0; j < POINTERS_PER_BLOCK; j++){
+					//Debug<DEFRAG_TRAIT>::msg("fs_defrag: inode " + std::to_string(i) + " indirect pointer " + std::to_string(j) + " ordering");
+					if(indirect.pointers[j] == pos){
+						Debug<DEFRAG_TRAIT>::msg("fs_defrag: inode " + std::to_string(i) + " indirect pointer " + std::to_string(indirect.pointers[j]) + " already ordere");
+						pos++;
+						if(pos == block.super.nblocks){
+							return 1;
+						}
+					}
+					else if(indirect.pointers[j] != 0){
+						if(data_bitmap[pos] ==  1){
+
+							disk_read(pos, aux.data);
+							disk_read(indirect.pointers[j], data.data);
+							disk_write(pos,data.data);
+							disk_write(indirect.pointers[j],aux.data);
+
+							inodo_change = aux_findid(pos);
+
+							Debug<DEFRAG_TRAIT>::msg("fs_defrag: inode " + std::to_string(i) + " indirect pointer " + std::to_string(indirect.pointers[j]) + " change data with inode " + std::to_string(inodo_change));
+
+							disk_read(inodo_change/INODES_PER_BLOCK + 1,aux.data);
+							var_aux = 0;
+							for(int k = 0;k < POINTERS_PER_INODE; k++){
+								if(aux.inode[inodo_change%INODES_PER_BLOCK].direct[k] == pos){
+									if(inodo_change/INODES_PER_BLOCK != i/INODES_PER_BLOCK){
+										aux.inode[inodo_change%INODES_PER_BLOCK].direct[k] = indirect.pointers[j];
+										disk_write(inodo_change/INODES_PER_BLOCK + 1,aux.data);
+									}
+									else{
+										inode.inode[inodo_change%INODES_PER_BLOCK].direct[k] = indirect.pointers[j];
+									}
+									Debug<DEFRAG_TRAIT>::msg("fs_defrag: inode " + std::to_string(i) + " indirect pointer " + std::to_string(indirect.pointers[j]) + " change data with inode " + std::to_string(inodo_change) + " direct pointer " + std::to_string(k));
+									var_aux = 1; //if pos refereced for direct pointer
+									if(DEFRAG_TRAIT){
+										disk_write(i/INODES_PER_BLOCK + 1, inode.data);
+										fs_debug();
+									}
+									break;
+								}
+							}
+							if(var_aux == 0){ //if pos refereced for indirect pointer
+								if(aux.inode[inodo_change%INODES_PER_BLOCK].indirect == pos){
+									if(inodo_change/INODES_PER_BLOCK != i/INODES_PER_BLOCK){
+										aux.inode[inodo_change%INODES_PER_BLOCK].indirect = indirect.pointers[j];
+										disk_write(inodo_change/INODES_PER_BLOCK + 1,aux.data);
+									}
+									else{
+										inode.inode[inodo_change%INODES_PER_BLOCK].indirect = indirect.pointers[j];
+									}
+									Debug<DEFRAG_TRAIT>::msg("fs_defrag: inode " + std::to_string(i) + " indirect pointer " + std::to_string(j) + " change data with inode " + std::to_string(inodo_change) + " indirect pointer");
+								}
+								else{
+									var_aux = aux.inode[inodo_change%INODES_PER_BLOCK].indirect;
+									disk_read(var_aux, aux.data);
+									for(int k = 0;k < POINTERS_PER_BLOCK;k++){
+										if(aux.pointers[k] == pos){
+											aux.pointers[k] = indirect.pointers[j];
+											disk_write(var_aux, aux.data);
+											Debug<DEFRAG_TRAIT>::msg("fs_defrag: inode " + std::to_string(i) + " indirect pointer " + std::to_string(indirect.pointers[j]) + " change data with inode " + std::to_string(inodo_change) + " indirect pointer " + std::to_string(k));
+											if(DEFRAG_TRAIT){
+												disk_write(i/INODES_PER_BLOCK + 1, inode.data);
+												fs_debug();
+											}
+											break;
+										}
+									}
+								}
+							}
+						}
+						else{
+							disk_read(indirect.pointers[j], data.data);
+							disk_write(pos,data.data);
+							data_bitmap[indirect.pointers[j]] = 0;
+							data_bitmap[pos] = 1;
+						}
+						indirect.pointers[j] = pos;
+						Debug<DEFRAG_TRAIT>::msg("fs_defrag: inode " + std::to_string(i) + " indirect pointer changed finished");
+						pos++;
+						if(pos == block.super.nblocks){
+							return 1;
+						}
+					disk_write(inode.inode[i%INODES_PER_BLOCK].indirect, indirect.data);
+					}
+				}
+			}
+			disk_write(i/INODES_PER_BLOCK + 1, inode.data);
+		}
+	}
+
+	Debug<DEFRAG_TRAIT>::msg("fs_defrag: ##### END #####");
+
+	return 1;
 }

@@ -80,7 +80,7 @@ int main( int argc, char *argv[] )
 			} else {
 				printf("use: getsize <inumber>\n");
 			}
-			
+
 		} else if(!strcmp(cmd,"create")) {
 			if(args==1) {
 				inumber = fs_create();
@@ -98,7 +98,7 @@ int main( int argc, char *argv[] )
 				if(fs_delete(inumber)) {
 					printf("inode %d deleted.\n",inumber);
 				} else {
-					printf("delete failed!\n");	
+					printf("delete failed!\n");
 				}
 			} else {
 				printf("use: delete <inumber>\n");
@@ -147,9 +147,22 @@ int main( int argc, char *argv[] )
 			printf("    cat     <inode>\n");
 			printf("    copyin  <file> <inode>\n");
 			printf("    copyout <inode> <file>\n");
+			printf("    defrag\n");
 			printf("    help\n");
 			printf("    quit\n");
 			printf("    exit\n");
+		}
+		else if(!strcmp(cmd,"defrag")){
+			if(args==1) {
+				if(fs_defrag()){
+					printf("defragmentation success\n");
+				}
+				else{
+					printf("defragmentation failed\n");
+				}
+			} else {
+				printf("use: debug\n");
+			}
 		} else if(!strcmp(cmd,"quit")) {
 			break;
 		} else if(!strcmp(cmd,"exit")) {
@@ -226,4 +239,3 @@ static int do_copyout( int inumber, const char *filename )
 	fclose(file);
 	return 1;
 }
-
